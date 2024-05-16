@@ -5,8 +5,7 @@ from TLorentzVector import TLorentzVector
 import numpy as np
 import matplotlib.pyplot as plt
 from time import perf_counter
-
-#plt.rcParams['text.usetex'] = True
+from lmfit.models import GaussianModel
 
 def mcWeights(data,norm,lumi=10):
     """
@@ -323,7 +322,7 @@ def displayPlots():
     #     h.plot(histtype="fill")
     # plt.show()
 
-    h = Hist(hist.axis.Regular(30, 60, 300, label = "aaa"))
+    h = Hist(hist.axis.Regular(30, 60, 300, label = "Transverse mass $m_T$ (GeV)"))
     for c in "A", "B", "C", "D":
         with open(f"data/save{c}.csv", "r") as f:
             dat = list(zip(*[[float(v) for v in line.split(",")] for line in f.read().strip().split("\n")]))
@@ -334,11 +333,11 @@ def displayPlots():
     #h.plot(histtype="fill")
     #plt.show()
 
-    ha = Hist(hist.axis.Regular(30, 60, 300, label = "aaa"))
+    ha = Hist(hist.axis.Regular(30, 60, 300, label = "Transverse mass $m_T$ (GeV)"))
 
     bg = Hist(
-        hist.axis.Regular(30, 60, 300, label = "aaa"), 
-        hist.axis.StrCategory(["single t", "W + jets", "tt", "WW"], name = "c")
+        hist.axis.Regular(30, 60, 300, label = "Transverse mass $m_T$ (GeV)"), 
+        hist.axis.StrCategory(["single t", "W + jets", "ttbar", "WW"], name = "c")
     )
 
 
@@ -375,19 +374,74 @@ def displayPlots():
     #            bg.fill(i, weight=v, c="W + jets")
     #            ha.fill(i, weight=v)
 
-    bg.plot(histtype="fill", stack=True)
-    plt.legend()
-    plt.show()
+    #bg.plot(histtype="fill", stack=True)
+    #plt.legend()
+    #plt.show()
 
-    h.plot(histtype="fill")
-    #(ha * 1.8).plot(histtype="fill", stack=True)
-    #hb.plot(histtype="fill", stack=True)
-    (bg * 1.26).plot(histtype="fill", stack=True)
-    plt.legend()
-    plt.show()
+    binCentres = np.arange(64, 300, 8)
 
-    (h - ha * 1.26).plot(histtype="fill")
-    plt.show()
+    def plotFullData():
+        (bg * 1.26).plot(histtype="fill", stack=True)
+        mainAxes = plt.gca()
+        mainAxes.set_ylabel("Events / bin")
+        mainAxes.set_ylim( bottom=0, top=np.amax(h)*1.4 )
+        mainAxes.errorbar(x=binCentres, y=h.values(), yerr=np.sqrt(h), fmt='ko', label='Data')
+
+        plt.text(
+            0.04, 0.92,
+            r'$\sqrt{s}$=13 TeV,$\int$L dt = 10 fb$^{-1}$',
+            transform=mainAxes.transAxes 
+        )
+        
+        plt.text(0.04, 0.84,
+            r'$H \rightarrow WW^* \rightarrow \mathrm{e}\nu\ \mu\nu$, $\mathrm{N}_\mathrm{jet} \leq 1$',
+            transform=mainAxes.transAxes
+        )
+
+        plt.legend()
+        plt.savefig("fullData.png", dpi=300, pad_inches=0.01)
+        plt.show()
+
+    def plotSignal():
+        signal = h - ha * 1.26
+        #signal.plot(histtype="fill")
+        signalX = signal.values()
+        signalXErrors = np.sqrt(np.abs(signalX))
+        mainAxes = plt.gca()
+        mainAxes.set_ylim( bottom=-20, top=np.amax(signal)*1.4 )
+        mainAxes.set_ylabel("Signal events / bin")
+        mainAxes.set_xlabel("Transverse mass $m_T$ (GeV)")
+
+        binEdges = np.arange(60, 301, 8)
+
+        guassMod = GaussianModel()
+        parameters = guassMod.guess(signalX, x=binCentres, amplitude=60, center=125, sigma=2)
+        out = guassMod.fit(signalX, parameters, x=binCentres)
+
+        plt.plot(binEdges, [0 for _ in binEdges], '--r')
+        plt.plot(binCentres, out.best_fit, '-r')
+        vs = out.params.valuesdict()
+        centre, sigma, amplitude = vs["center"], vs["sigma"], vs["amplitude"]
+
+        mainAxes.errorbar(x=binCentres, y=signalX, yerr=np.sqrt(signalXErrors), fmt='ko', label='Data')
+
+        plt.text(
+            0.04, 0.92,
+            r'$\sqrt{s}$=13 TeV,$\int$L dt = 10 fb$^{-1}$',
+            transform=mainAxes.transAxes 
+        )
+        
+        plt.text(0.04, 0.84,
+            r'Modelled as Guassian distribution with $\sigma = ' + f"{sigma:.3f}" + r'$, $\mu= ' + f"{centre:.3f}" + r'$.',
+            transform=mainAxes.transAxes
+        )
+
+        plt.title(r"Higgs signal from $H\rightarrow WW^*$ decay channel")
+        plt.savefig("signalData.png", dpi=300, pad_inches=0.01)
+        plt.show()
+
+    plotFullData()
+    plotSignal()
 
 if __name__ == "__main__":
     displayPlots()
